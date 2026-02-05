@@ -1,10 +1,3 @@
-/**
- * Sample-Based Mixer Engine
- *
- * Key insight: Chords define the key. ALL other harmonic layers MUST match.
- * This is how lofi.co works - samples are grouped by key compatibility.
- */
-
 import * as Tone from 'tone';
 import {
   SamplePack,
@@ -16,39 +9,33 @@ import {
 } from './types';
 import { SAMPLES_BASE_PATH, getSamplesByCategory } from './manifest';
 
-// Crossfade duration in seconds
 const CROSSFADE_DURATION = 2;
+const SECTION_LENGTH_BARS = 16;
 
-// How often to consider changing samples (in bars at 120 BPM)
-const SECTION_LENGTH_BARS = 16; // Longer sections = more coherent
-
-// Probability of changing a layer when a section ends
 const LAYER_CHANGE_PROBABILITY: Record<SampleCategory, number> = {
-  loops: 0,        // Not used in stem mode
-  drums: 0.2,      // Drums can change, they work with any key
-  chords: 0.15,    // Chords change = key change = everything changes
-  melodies: 0.3,   // Melodies can swap within same key
-  bass: 0.2,       // Bass swaps within same key
-  ambient: 0.1,    // Ambient rarely changes
+  loops: 0,
+  drums: 0.2,
+  chords: 0.15,
+  melodies: 0.3,
+  bass: 0.2,
+  ambient: 0.1,
 };
 
-// Volume levels for each layer (in dB) - tuned for good mix
 const LAYER_VOLUMES: Record<SampleCategory, number> = {
   loops: 0,
-  drums: -3,       // Drums present but not overwhelming
-  chords: -5,      // Chords are the harmonic bed
-  melodies: -7,    // Melodies sit on top, not too loud
-  bass: -6,        // Bass fills the low end
-  ambient: -18,    // Ambient very subtle
+  drums: -3,
+  chords: -5,
+  melodies: -7,
+  bass: -6,
+  ambient: -18,
 };
 
-// Keys that work together (same key or relative major/minor)
 const KEY_COMPATIBILITY: Record<string, string[]> = {
-  'C': ['C', 'Am'],      // C major and A minor (relative)
-  'Am': ['Am', 'C'],     // A minor and C major (relative)
-  'Cm': ['Cm'],          // C minor - keep it pure
-  'Fm': ['Fm'],          // F minor - keep it pure
-  'Dm': ['Dm'],          // D minor - keep it pure
+  'C': ['C', 'Am'],
+  'Am': ['Am', 'C'],
+  'Cm': ['Cm'],
+  'Fm': ['Fm'],
+  'Dm': ['Dm'],
 };
 
 interface ActiveLayer {
@@ -64,7 +51,7 @@ export class SampleMixer {
 
   private output: Tone.Gain | null = null;
   private bpm: number = 120;
-  private currentKey: string = 'Cm';  // Current musical key (from chords)
+  private currentKey: string = 'Cm';
   private currentEnergy: EnergyLevel = 'low';
   private currentMood: Mood = 'chill';
 
@@ -85,10 +72,7 @@ export class SampleMixer {
     this.pack = pack;
     this.bpm = pack.defaultBpm;
 
-    // Load all stems (exclude loops)
     const stemsToLoad = pack.samples.filter(s => s.category !== 'loops');
-
-    console.log(`Loading sample pack: ${pack.name} (${stemsToLoad.length} stems)`);
 
     const loadPromises = stemsToLoad.map(async (sample) => {
       const url = `${SAMPLES_BASE_PATH}/${sample.filename}`;
@@ -108,13 +92,12 @@ export class SampleMixer {
           buffer: player.buffer.get() as AudioBuffer,
           player,
         });
-      } catch (error) {
-        console.warn(`Failed to load sample: ${sample.filename}`, error);
+      } catch {
+        // Skip failed samples
       }
     });
 
     await Promise.all(loadPromises);
-    console.log(`Loaded ${this.loadedSamples.size} samples`);
   }
 
   getOutput(): Tone.Gain {
@@ -129,55 +112,40 @@ export class SampleMixer {
     if (params.mood) this.currentMood = params.mood;
   }
 
-  /**
-   * Get compatible keys for the given key
-   */
   private getCompatibleKeys(key: string): string[] {
     return KEY_COMPATIBILITY[key] || [key];
   }
 
-  /**
-   * Check if a sample's key is compatible with the current key
-   */
   private isKeyCompatible(sampleKey: string): boolean {
-    // Drums work with everything
     if (sampleKey === 'C' && !this.currentKey) return true;
 
     const compatibleKeys = this.getCompatibleKeys(this.currentKey);
     return compatibleKeys.includes(sampleKey);
   }
 
-  /**
-   * Select a sample for a category, respecting key constraints
-   */
   private selectSample(category: SampleCategory, forceKeyMatch: boolean = true): SampleMetadata | null {
     if (!this.pack) return null;
 
     let candidates = getSamplesByCategory(this.pack, category);
     if (candidates.length === 0) return null;
 
-    // Filter to loaded samples
     candidates = candidates.filter(c => this.loadedSamples.has(c.id));
     if (candidates.length === 0) return null;
 
-    // For harmonic content (chords, melodies, bass), enforce key matching
     if (forceKeyMatch && (category === 'melodies' || category === 'bass')) {
       const keyMatched = candidates.filter(c => this.isKeyCompatible(c.key));
       if (keyMatched.length > 0) {
         candidates = keyMatched;
       } else {
-        console.warn(`No ${category} samples match key ${this.currentKey}`);
-        return null; // Don't play incompatible samples
+        return null;
       }
     }
 
-    // Exclude currently playing sample
     const current = this.activeLayers.get(category);
     if (current && candidates.length > 1) {
       candidates = candidates.filter(c => c.id !== current.sample.id);
     }
 
-    // Prefer mood/energy matches but don't require them
     const scored = candidates.map(sample => {
       let score = 1;
       if (sample.mood === this.currentMood) score += 2;
@@ -185,7 +153,6 @@ export class SampleMixer {
       return { sample, score };
     });
 
-    // Sort by score and pick from top candidates with some randomness
     scored.sort((a, b) => b.score - a.score);
     const topScore = scored[0].score;
     const topCandidates = scored.filter(s => s.score >= topScore - 1);
@@ -194,9 +161,6 @@ export class SampleMixer {
     return pick.sample;
   }
 
-  /**
-   * Select chords (this defines the key for everything else)
-   */
   private selectChords(): SampleMetadata | null {
     if (!this.pack) return null;
 
@@ -204,13 +168,11 @@ export class SampleMixer {
     candidates = candidates.filter(c => this.loadedSamples.has(c.id));
     if (candidates.length === 0) return null;
 
-    // Exclude current
     const current = this.activeLayers.get('chords');
     if (current && candidates.length > 1) {
       candidates = candidates.filter(c => c.id !== current.sample.id);
     }
 
-    // Prefer mood/energy matches
     const scored = candidates.map(sample => {
       let score = 1;
       if (sample.mood === this.currentMood) score += 3;
@@ -230,7 +192,6 @@ export class SampleMixer {
     const loaded = this.loadedSamples.get(sample.id);
     if (!loaded || !loaded.player) return;
 
-    // Clean up existing layer first
     const existing = this.activeLayers.get(category);
     if (existing) {
       existing.player.stop();
@@ -258,8 +219,6 @@ export class SampleMixer {
     if (this.isPlaying) {
       player.sync().start(0);
     }
-
-    console.log(`Activated: ${category} -> ${sample.id} (key: ${sample.key})`);
   }
 
   private crossfadeLayer(category: SampleCategory, newSample: SampleMetadata): void {
@@ -307,53 +266,31 @@ export class SampleMixer {
       player: newPlayer,
       gain: newGain,
     });
-
-    console.log(`Crossfade: ${category} -> ${newSample.id} (key: ${newSample.key})`);
   }
 
-  /**
-   * Build a coherent set of layers around a chord progression
-   */
   private buildCoherentSet(): void {
-    // 1. Select chords FIRST - this defines the key
     const chords = this.selectChords();
-    if (!chords) {
-      console.error('No chords available!');
-      return;
-    }
+    if (!chords) return;
 
     this.currentKey = chords.key;
     this.activateLayer('chords', chords);
-    console.log(`Key established: ${this.currentKey}`);
 
-    // 2. Select drums (key-independent)
     const drums = this.selectSample('drums', false);
-    if (drums) {
-      this.activateLayer('drums', drums);
-    }
+    if (drums) this.activateLayer('drums', drums);
 
-    // 3. Maybe add melody (must match key)
     if (Math.random() < 0.7) {
       const melody = this.selectSample('melodies', true);
-      if (melody) {
-        this.activateLayer('melodies', melody);
-      }
+      if (melody) this.activateLayer('melodies', melody);
     }
 
-    // 4. Maybe add bass (must match key)
     if (Math.random() < 0.6) {
       const bass = this.selectSample('bass', true);
-      if (bass) {
-        this.activateLayer('bass', bass);
-      }
+      if (bass) this.activateLayer('bass', bass);
     }
 
-    // 5. Maybe add ambient (key-independent)
     if (Math.random() < 0.5) {
       const ambient = this.selectSample('ambient', false);
-      if (ambient) {
-        this.activateLayer('ambient', ambient);
-      }
+      if (ambient) this.activateLayer('ambient', ambient);
     }
   }
 
@@ -365,24 +302,19 @@ export class SampleMixer {
     if (this.isPlaying) return;
 
     Tone.getTransport().bpm.value = this.bpm;
-
-    // Build a coherent set of samples
     this.buildCoherentSet();
 
-    // Schedule section changes
     this.barCallback = Tone.getTransport().scheduleRepeat(
       (time) => this.onBar(time),
       '1m',
       0
     );
 
-    // Start all layers
     for (const [, layer] of this.activeLayers) {
       layer.player.sync().start(0);
     }
 
     this.isPlaying = true;
-    console.log('Mixer started with key:', this.currentKey, 'layers:', Array.from(this.activeLayers.keys()).join(', '));
   }
 
   stop(): void {
@@ -405,8 +337,6 @@ export class SampleMixer {
     this.barCount = 0;
     this.sectionCount = 0;
     this.isPlaying = false;
-
-    console.log('Mixer stopped');
   }
 
   private onBar(_time: number): void {
@@ -420,21 +350,14 @@ export class SampleMixer {
   }
 
   private onSectionChange(): void {
-    console.log(`Section ${this.sectionCount} - key: ${this.currentKey}`);
-
-    // Maybe change chords (which changes everything)
     if (Math.random() < LAYER_CHANGE_PROBABILITY.chords) {
       const newChords = this.selectChords();
       if (newChords && newChords.id !== this.activeLayers.get('chords')?.sample.id) {
-        // Key is changing - need to update all harmonic layers
         const oldKey = this.currentKey;
         this.currentKey = newChords.key;
-
         this.crossfadeLayer('chords', newChords);
 
-        // If key changed, swap melodies and bass to match
         if (oldKey !== this.currentKey) {
-          console.log(`Key change: ${oldKey} -> ${this.currentKey}`);
 
           if (this.activeLayers.has('melodies')) {
             const newMelody = this.selectSample('melodies', true);
@@ -450,11 +373,10 @@ export class SampleMixer {
             }
           }
         }
-        return; // Don't make other changes this section
+        return;
       }
     }
 
-    // Maybe change drums (key-independent)
     if (Math.random() < LAYER_CHANGE_PROBABILITY.drums) {
       const newDrums = this.selectSample('drums', false);
       if (newDrums && newDrums.id !== this.activeLayers.get('drums')?.sample.id) {
@@ -462,7 +384,6 @@ export class SampleMixer {
       }
     }
 
-    // Maybe change melody (within same key)
     if (this.activeLayers.has('melodies') && Math.random() < LAYER_CHANGE_PROBABILITY.melodies) {
       const newMelody = this.selectSample('melodies', true);
       if (newMelody && newMelody.id !== this.activeLayers.get('melodies')?.sample.id) {
@@ -470,7 +391,6 @@ export class SampleMixer {
       }
     }
 
-    // Maybe add a missing layer
     if (Math.random() < 0.15) {
       if (!this.activeLayers.has('melodies')) {
         const melody = this.selectSample('melodies', true);
@@ -484,7 +404,6 @@ export class SampleMixer {
       }
     }
 
-    // Maybe remove a layer (for dynamics)
     if (Math.random() < 0.08 && this.activeLayers.size > 3) {
       const removable: SampleCategory[] = ['melodies', 'bass', 'ambient']
         .filter(c => this.activeLayers.has(c as SampleCategory)) as SampleCategory[];
@@ -504,7 +423,6 @@ export class SampleMixer {
             layer.player.disconnect();
             layer.gain.disconnect();
             this.activeLayers.delete(category);
-            console.log(`Removed: ${category}`);
           }, CROSSFADE_DURATION * 1000 + 100);
         }
       }
@@ -512,39 +430,24 @@ export class SampleMixer {
   }
 
   async transition(): Promise<void> {
-    // Full transition = new coherent set
-    console.log('Full transition requested');
-
-    // Select new chords first
     const newChords = this.selectChords();
     if (newChords) {
       this.currentKey = newChords.key;
       this.crossfadeLayer('chords', newChords);
     }
 
-    // New drums
     const newDrums = this.selectSample('drums', false);
-    if (newDrums) {
-      this.crossfadeLayer('drums', newDrums);
-    }
+    if (newDrums) this.crossfadeLayer('drums', newDrums);
 
-    // New melody matching new key
     if (this.activeLayers.has('melodies')) {
       const newMelody = this.selectSample('melodies', true);
-      if (newMelody) {
-        this.crossfadeLayer('melodies', newMelody);
-      }
+      if (newMelody) this.crossfadeLayer('melodies', newMelody);
     }
 
-    // New bass matching new key
     if (this.activeLayers.has('bass')) {
       const newBass = this.selectSample('bass', true);
-      if (newBass) {
-        this.crossfadeLayer('bass', newBass);
-      }
+      if (newBass) this.crossfadeLayer('bass', newBass);
     }
-
-    console.log('Transitioned to new set, key:', this.currentKey);
   }
 
   getState(): {

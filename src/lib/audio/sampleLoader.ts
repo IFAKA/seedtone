@@ -33,7 +33,6 @@ export function getPianoSamplerUrls(layer: VelocityLayer): Record<string, string
     urls[key] = `/samples/piano/${layer}/${note}.mp3`;
   }
 
-  console.log(`[SampleLoader] Piano URLs for ${layer}:`, Object.keys(urls).slice(0, 4), '...');
   return urls;
 }
 

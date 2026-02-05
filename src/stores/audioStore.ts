@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { audioEngine, type EngineState, type NoiseType } from '@/lib/audio/engine';
+import { audioEngine, type NoiseType } from '@/lib/audio/engine';
 import { handleExplicitLike, handleExplicitDislike, isTrackingSong } from '@/lib/preferences/feedback';
 
 interface AudioStore {
@@ -137,28 +137,23 @@ export const useAudioStore = create<AudioStore>((set, get) => {
     },
 
     like: async () => {
-      // Send explicit like feedback to the bandit
       if (isTrackingSong()) {
         try {
           await handleExplicitLike();
-          console.log('Liked song in key:', get().currentKey);
-        } catch (err) {
-          console.debug('Error recording like:', err);
+        } catch {
+          // Ignore feedback errors
         }
       }
     },
 
     dislike: async () => {
-      // Send explicit dislike feedback to the bandit
       if (isTrackingSong()) {
         try {
           await handleExplicitDislike();
-          console.log('Disliked song in key:', get().currentKey);
-        } catch (err) {
-          console.debug('Error recording dislike:', err);
+        } catch {
+          // Ignore feedback errors
         }
       }
-      // Skip to new progression with bandit-selected params
       await get().generate();
     },
 

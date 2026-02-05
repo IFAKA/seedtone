@@ -1,9 +1,3 @@
-/**
- * Main Audio Engine - Uses generative lofi engine from lofi-engine
- * Integrates with the learning system (Thompson sampling bandit) to
- * apply user preferences to music generation.
- */
-
 import { generativeEngine, type NoiseType } from './generative';
 import { mediaSession } from './mediaSession';
 import { selectGenerationParams } from '@/lib/preferences/bandit';
@@ -43,7 +37,6 @@ class AudioEngine {
 
   private stateListeners: Set<(state: EngineState) => void> = new Set();
 
-  // Listen duration tracking for feedback system
   private durationInterval: ReturnType<typeof setInterval> | null = null;
   private listenStartTime: number = 0;
 
@@ -55,7 +48,6 @@ class AudioEngine {
 
     await generativeEngine.initialize();
 
-    // Subscribe to generative engine state
     generativeEngine.subscribe((genState) => {
       this.state.isPlaying = genState.isPlaying;
       this.state.currentKey = genState.key;
@@ -80,32 +72,21 @@ class AudioEngine {
   }
 
   async generateNewSong(): Promise<void> {
-    // End tracking for previous song (marked as skipped)
     if (isTrackingSong()) {
       try {
         await endSongPlayback(true);
-      } catch (err) {
+      } catch {
         // Ignore errors from ending previous song
-        console.debug('Error ending previous song tracking:', err);
       }
     }
     this.stopDurationTracking();
 
-    // Select generation parameters using the bandit
     const params = await selectGenerationParams();
-
-    // Apply learned parameters to generative engine
     generativeEngine.applyGenerationParams(params);
-
-    // Trigger new progression/song
     generativeEngine.skip();
 
-    // Start tracking the new song
-    // Estimated duration ~180 seconds (3 minutes) for a typical lo-fi section
     const songId = await startSongTracking(params, 180);
     this.state.songId = songId;
-
-    // Start duration tracking
     this.startDurationTracking();
 
     const genState = generativeEngine.getState();
@@ -124,7 +105,6 @@ class AudioEngine {
       await this.initialize();
     }
 
-    // If not tracking a song yet, generate one with bandit params
     if (!isTrackingSong()) {
       const params = await selectGenerationParams();
       generativeEngine.applyGenerationParams(params);
@@ -133,8 +113,6 @@ class AudioEngine {
     }
 
     await generativeEngine.play();
-
-    // Start duration tracking
     this.startDurationTracking();
 
     const genState = generativeEngine.getState();
@@ -155,12 +133,11 @@ class AudioEngine {
   }
 
   async stop(): Promise<void> {
-    // End tracking for current song (not skipped, just stopped)
     if (isTrackingSong()) {
       try {
         await endSongPlayback(false);
-      } catch (err) {
-        console.debug('Error ending song tracking on stop:', err);
+      } catch {
+        // Ignore errors when stopping
       }
     }
     this.stopDurationTracking();
@@ -182,10 +159,6 @@ class AudioEngine {
     generativeEngine.setNoiseVolume(volume);
   }
 
-  /**
-   * Start tracking listen duration for the feedback system
-   * Updates every second while playing
-   */
   private startDurationTracking(): void {
     this.listenStartTime = Date.now();
     this.durationInterval = setInterval(() => {
@@ -196,9 +169,6 @@ class AudioEngine {
     }, 1000);
   }
 
-  /**
-   * Stop tracking listen duration
-   */
   private stopDurationTracking(): void {
     if (this.durationInterval) {
       clearInterval(this.durationInterval);

@@ -39,10 +39,7 @@ export async function initMelodyRNN(): Promise<void> {
       const modelUrl = getModelUrl('improv_rnn');
       model = new MusicRNN(modelUrl) as unknown as MusicRNN;
       await model.initialize();
-
-      console.log('MelodyRNN initialized');
     } catch (error) {
-      console.error('Failed to initialize MelodyRNN:', error);
       throw error;
     } finally {
       isLoading = false;
