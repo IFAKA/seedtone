@@ -34,6 +34,7 @@
     "tailwind-merge": "^3.4.0",
     "tone": "^15.1.22",
     "vaul": "^1.1.2",
+    "vercel": "^50.11.0",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
