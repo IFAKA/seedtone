@@ -63,7 +63,7 @@ export const VolumeSlider = memo(function VolumeSlider({ volume, onChange, isVis
       {isVisible && (
         <motion.div
           {...fadeInUp}
-          className="glass rounded-full px-5 py-4 flex items-center gap-4"
+          className="glass rounded-full px-5 h-16 md:h-20 flex items-center gap-4"
           onClick={handleContainerClick}
         >
           <button

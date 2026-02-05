@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useCallback, useEffect } from 'react';
+import { memo, useState, useCallback, useEffect, ReactNode } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { GlassButton } from '../ui';
 
@@ -8,9 +8,10 @@ interface FeedbackButtonsProps {
   onLike: () => void;
   onDislike: () => void;
   songId?: string | null;
+  centerSlot?: ReactNode;
 }
 
-export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike, songId }: FeedbackButtonsProps) {
+export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike, songId, centerSlot }: FeedbackButtonsProps) {
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
 
@@ -20,7 +21,10 @@ export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike
   }, [songId]);
 
   const handleLike = useCallback(() => {
-    if (!liked) {
+    if (liked) {
+      // Undo like
+      setLiked(false);
+    } else {
       setLiked(true);
       setDisliked(false);
       onLike();
@@ -29,6 +33,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike
 
   const handleDislike = useCallback(() => {
     if (!disliked) {
+      // Dislike skips the song, so no undo possible
       setDisliked(true);
       setLiked(false);
       onDislike();
@@ -36,7 +41,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike
   }, [disliked, onDislike]);
 
   return (
-    <div className="flex items-center gap-6 md:gap-8">
+    <div className="flex items-center gap-4 md:gap-6">
       <GlassButton
         variant="default"
         size="lg-responsive"
@@ -46,6 +51,8 @@ export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike
       >
         <ThumbsDown fill={disliked ? 'currentColor' : 'none'} />
       </GlassButton>
+
+      {centerSlot}
 
       <GlassButton
         variant="default"

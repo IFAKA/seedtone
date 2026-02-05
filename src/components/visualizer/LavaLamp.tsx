@@ -2,8 +2,237 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAudioAnalyzer } from '@/lib/audio/useAudioAnalyzer';
-import { usePerformanceTier, useIsMobile } from '@/lib/hooks/useIsMobile';
+import { usePerformanceTier, useIsMobile, type DeviceType } from '@/lib/hooks/useIsMobile';
 import { useEffect, useState, useRef, useCallback, memo } from 'react';
+
+// ============ Lightweight Gradient Visualizer ============
+// Pure CSS animations with minimal JS - runs at 60fps on any device
+// Used for phones, tablets, and small screens
+
+interface GradientVisualizerProps {
+  isPlaying: boolean;
+  bpm: number;
+  deviceType: DeviceType;
+  screenWidth: number;
+  screenHeight: number;
+}
+
+const GradientVisualizer = memo(function GradientVisualizer({
+  isPlaying,
+  bpm,
+  deviceType,
+  screenWidth,
+  screenHeight,
+}: GradientVisualizerProps) {
+  const { bass, overall } = useAudioAnalyzer(isPlaying);
+  const [hasEverPlayed, setHasEverPlayed] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Track if we've ever played
+  useEffect(() => {
+    if (isPlaying) setHasEverPlayed(true);
+  }, [isPlaying]);
+
+  // Update CSS variables based on audio - throttled to ~10fps (every 100ms)
+  useEffect(() => {
+    if (!isPlaying || !containerRef.current) return;
+
+    let lastUpdate = 0;
+    let rafId: number;
+
+    const update = (t: number) => {
+      rafId = requestAnimationFrame(update);
+      if (t - lastUpdate < 100) return;
+      lastUpdate = t;
+
+      if (containerRef.current) {
+        const intensity = Math.min(1, 0.3 + bass * 0.7 + overall * 0.3);
+        const scale = 1 + bass * 0.15;
+        containerRef.current.style.setProperty('--intensity', intensity.toString());
+        containerRef.current.style.setProperty('--scale', scale.toString());
+      }
+    };
+
+    rafId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, bass, overall]);
+
+  // Adjust animation speed based on BPM
+  const animDuration = Math.max(8, 20 - (bpm - 60) * 0.1);
+
+  // Adapt orb sizes and positions based on device type and screen dimensions
+  const isLandscape = screenWidth > screenHeight;
+  const isPhone = deviceType === 'phone';
+  const isTablet = deviceType === 'tablet';
+
+  // Orb configuration based on device
+  const orbConfig = {
+    orb1: {
+      width: isPhone ? '70%' : isTablet ? '55%' : '50%',
+      height: isPhone ? (isLandscape ? '50%' : '35%') : isTablet ? '40%' : '35%',
+      left: isPhone ? '15%' : '25%',
+      bottom: isPhone ? '5%' : '10%',
+    },
+    orb2: {
+      width: isPhone ? '55%' : isTablet ? '45%' : '40%',
+      height: isPhone ? (isLandscape ? '40%' : '30%') : isTablet ? '35%' : '30%',
+      left: isPhone ? '30%' : '35%',
+      bottom: isPhone ? '15%' : '20%',
+    },
+    orb3: {
+      width: isPhone ? '45%' : isTablet ? '35%' : '30%',
+      height: isPhone ? (isLandscape ? '30%' : '22%') : isTablet ? '25%' : '22%',
+      left: isPhone ? '10%' : '20%',
+      bottom: isPhone ? '25%' : '30%',
+    },
+    // Add extra orbs for larger screens
+    showOrb4: !isPhone,
+    orb4: {
+      width: isTablet ? '30%' : '25%',
+      height: isTablet ? '22%' : '18%',
+      left: '55%',
+      bottom: '35%',
+    },
+  };
+
+  return (
+    <AnimatePresence>
+      {hasEverPlayed && (
+        <motion.div
+          ref={containerRef}
+          className="absolute inset-0 overflow-hidden pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1.5 }}
+          style={{
+            '--intensity': '0.4',
+            '--scale': '1',
+          } as React.CSSProperties}
+        >
+          {/* Base ambient layer */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'radial-gradient(ellipse at 50% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 60%)',
+            }}
+          />
+
+          {/* Animated gradient orbs - pure CSS animation */}
+          <div
+            className="absolute inset-0"
+            style={{
+              opacity: 'calc(0.6 + var(--intensity) * 0.4)',
+              transform: 'scale(var(--scale))',
+              transition: 'opacity 150ms ease-out, transform 150ms ease-out',
+              willChange: 'opacity, transform',
+            }}
+          >
+            {/* Orb 1 - Large, slow drift */}
+            <div
+              style={{
+                position: 'absolute',
+                width: orbConfig.orb1.width,
+                height: orbConfig.orb1.height,
+                left: orbConfig.orb1.left,
+                bottom: orbConfig.orb1.bottom,
+                background: 'radial-gradient(ellipse at center, rgba(168, 85, 247, 0.25) 0%, rgba(139, 92, 246, 0.1) 40%, transparent 70%)',
+                borderRadius: '50%',
+                animation: `gradientOrb1 ${animDuration}s ease-in-out infinite`,
+                willChange: 'transform',
+              }}
+            />
+
+            {/* Orb 2 - Medium, offset phase */}
+            <div
+              style={{
+                position: 'absolute',
+                width: orbConfig.orb2.width,
+                height: orbConfig.orb2.height,
+                left: orbConfig.orb2.left,
+                bottom: orbConfig.orb2.bottom,
+                background: 'radial-gradient(ellipse at center, rgba(192, 132, 252, 0.2) 0%, rgba(168, 85, 247, 0.08) 50%, transparent 70%)',
+                borderRadius: '50%',
+                animation: `gradientOrb2 ${animDuration * 0.8}s ease-in-out infinite`,
+                animationDelay: `-${animDuration * 0.3}s`,
+                willChange: 'transform',
+              }}
+            />
+
+            {/* Orb 3 - Small accent */}
+            <div
+              style={{
+                position: 'absolute',
+                width: orbConfig.orb3.width,
+                height: orbConfig.orb3.height,
+                left: orbConfig.orb3.left,
+                bottom: orbConfig.orb3.bottom,
+                background: 'radial-gradient(ellipse at center, rgba(216, 180, 254, 0.18) 0%, rgba(192, 132, 252, 0.06) 50%, transparent 70%)',
+                borderRadius: '50%',
+                animation: `gradientOrb3 ${animDuration * 1.2}s ease-in-out infinite`,
+                animationDelay: `-${animDuration * 0.6}s`,
+                willChange: 'transform',
+              }}
+            />
+
+            {/* Orb 4 - Extra orb for tablets and small desktops */}
+            {orbConfig.showOrb4 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  width: orbConfig.orb4.width,
+                  height: orbConfig.orb4.height,
+                  left: orbConfig.orb4.left,
+                  bottom: orbConfig.orb4.bottom,
+                  background: 'radial-gradient(ellipse at center, rgba(147, 51, 234, 0.15) 0%, rgba(139, 92, 246, 0.05) 50%, transparent 70%)',
+                  borderRadius: '50%',
+                  animation: `gradientOrb4 ${animDuration * 0.9}s ease-in-out infinite`,
+                  animationDelay: `-${animDuration * 0.5}s`,
+                  willChange: 'transform',
+                }}
+              />
+            )}
+          </div>
+
+          {/* Top fade overlay */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 30%)',
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* CSS Keyframes */}
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes gradientOrb1 {
+              0%, 100% { transform: translate(0, 0) scale(1); }
+              25% { transform: translate(5%, -8%) scale(1.05); }
+              50% { transform: translate(-3%, -5%) scale(0.95); }
+              75% { transform: translate(8%, -3%) scale(1.02); }
+            }
+            @keyframes gradientOrb2 {
+              0%, 100% { transform: translate(0, 0) scale(1); }
+              33% { transform: translate(-8%, -10%) scale(1.08); }
+              66% { transform: translate(6%, -6%) scale(0.96); }
+            }
+            @keyframes gradientOrb3 {
+              0%, 100% { transform: translate(0, 0) scale(1); }
+              50% { transform: translate(10%, -12%) scale(1.1); }
+            }
+            @keyframes gradientOrb4 {
+              0%, 100% { transform: translate(0, 0) scale(1); }
+              40% { transform: translate(-6%, -8%) scale(1.06); }
+              80% { transform: translate(4%, -4%) scale(0.98); }
+            }
+          `}} />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+});
+
+// ============ Desktop Blob Visualizer ============
 
 interface Blob {
   id: number;
@@ -38,19 +267,40 @@ const initBlobs = (tier: keyof typeof TIER_CONFIG): Blob[] => {
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
 export const LavaLamp = memo(function LavaLamp({ isPlaying, bpm }: { isPlaying: boolean; bpm: number }) {
-  const { isMobile } = useIsMobile();
+  const { deviceType, screenWidth, screenHeight } = useIsMobile();
   const tier = usePerformanceTier();
-  const { bass, mids, overall } = useAudioAnalyzer(isPlaying && !isMobile);
+
+  // Use lightweight visualizer for phones and tablets (screen width < 768px)
+  const useGradientVisualizer = deviceType !== 'desktop';
+
+  const { bass, mids, overall } = useAudioAnalyzer(isPlaying && !useGradientVisualizer);
   const config = TIER_CONFIG[tier];
 
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const [blobs, setBlobs] = useState<Blob[]>(() => initBlobs(tier));
   const [isTabVisible, setIsTabVisible] = useState(true);
+  const prevGradientMode = useRef(useGradientVisualizer);
 
   const audioRef = useRef({ bass: 0, mids: 0, overall: 0, bpm: 80 });
   audioRef.current = { bass, mids, overall, bpm };
 
-  useEffect(() => { setBlobs(initBlobs(tier)); }, [tier]);
+  // Re-init blobs when tier changes (only matters for blob visualizer)
+  useEffect(() => {
+    if (!useGradientVisualizer) {
+      setBlobs(initBlobs(tier));
+    }
+  }, [tier, useGradientVisualizer]);
+
+  // Re-init blobs when switching from gradient to blob visualizer
+  useEffect(() => {
+    const switchedToBlobs = prevGradientMode.current && !useGradientVisualizer;
+    prevGradientMode.current = useGradientVisualizer;
+
+    if (switchedToBlobs) {
+      setBlobs(initBlobs(tier));
+    }
+  }, [useGradientVisualizer, tier]);
+
   useEffect(() => { if (isPlaying) setHasEverPlayed(true); }, [isPlaying]);
 
   useEffect(() => {
@@ -160,7 +410,18 @@ export const LavaLamp = memo(function LavaLamp({ isPlaying, bpm }: { isPlaying: 
     return () => cancelAnimationFrame(rafId);
   }, [isPlaying, tick, config.interval, isTabVisible]);
 
-  if (isMobile) return null;
+  // Use lightweight CSS gradient visualizer for phones, tablets, and small screens
+  if (useGradientVisualizer) {
+    return (
+      <GradientVisualizer
+        isPlaying={isPlaying}
+        bpm={bpm}
+        deviceType={deviceType}
+        screenWidth={screenWidth}
+        screenHeight={screenHeight}
+      />
+    );
+  }
 
   return (
     <AnimatePresence>

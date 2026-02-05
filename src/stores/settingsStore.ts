@@ -20,6 +20,7 @@ interface SettingsStore {
   focusTimerMinutes: number | null;
   focusTimerEndTime: number | null;
   focusSessionStart: number | null;
+  focusElapsedMs: number; // Accumulated focus time across pause/resume
   showAdvancedSettings: boolean;
 
   setBpmRange: (min: number, max: number) => void;
@@ -34,7 +35,8 @@ interface SettingsStore {
   setFocusTimer: (minutes: number | null) => void;
   clearFocusTimer: () => void;
   startFocusSession: () => void;
-  endFocusSession: () => void;
+  pauseFocusSession: () => void;
+  resetFocusSession: () => void;
   setShowAdvancedSettings: (show: boolean) => void;
 }
 
@@ -49,7 +51,7 @@ export const useSettingsStore = create<SettingsStore>()(
       sleepTimerMinutes: null,
       sleepTimerEndTime: null,
 
-      backgroundEnabled: false, // OFF by default for ADHD focus
+      backgroundEnabled: true, // ON by default for desktop
 
       // Focus/ADHD defaults
       noiseType: 'pink',
@@ -57,6 +59,7 @@ export const useSettingsStore = create<SettingsStore>()(
       focusTimerMinutes: null,
       focusTimerEndTime: null,
       focusSessionStart: null,
+      focusElapsedMs: 0,
       showAdvancedSettings: false,
 
       setBpmRange: (min, max) => {
@@ -116,8 +119,19 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ focusSessionStart: Date.now() });
       },
 
-      endFocusSession: () => {
-        set({ focusSessionStart: null });
+      pauseFocusSession: () => {
+        set((state) => {
+          if (!state.focusSessionStart) return state;
+          const elapsed = Date.now() - state.focusSessionStart;
+          return {
+            focusSessionStart: null,
+            focusElapsedMs: state.focusElapsedMs + elapsed,
+          };
+        });
+      },
+
+      resetFocusSession: () => {
+        set({ focusSessionStart: null, focusElapsedMs: 0 });
       },
 
       setShowAdvancedSettings: (show) => {

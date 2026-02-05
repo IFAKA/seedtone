@@ -5,9 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePreferenceStore } from '@/stores/preferenceStore';
 import { useSettingsStore, type NoiseType } from '@/stores/settingsStore';
 import { useAudioStore } from '@/stores/audioStore';
-import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import {
-  Switch,
   Slider,
   Drawer,
   DrawerContent,
@@ -91,7 +89,6 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     explorationLevel,
     sleepTimerMinutes,
     sleepTimerEndTime,
-    backgroundEnabled,
     noiseType,
     noiseVolume,
     focusTimerMinutes,
@@ -101,7 +98,6 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     setExplorationLevel,
     setSleepTimer,
     clearSleepTimer,
-    setBackgroundEnabled,
     setNoiseType,
     setNoiseVolume,
     setFocusTimer,
@@ -109,7 +105,6 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   } = useSettingsStore();
 
   const { pause, setNoiseType: setAudioNoiseType, setNoiseVolume: setAudioNoiseVolume } = useAudioStore();
-  const { isCompact } = useIsMobile();
 
   const [localBpmMin, setLocalBpmMin] = useState(bpmMin);
   const [localBpmMax, setLocalBpmMax] = useState(bpmMax);
@@ -272,8 +267,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
               }}
               className={`px-4 py-2 rounded-xl text-sm transition-colors ${
                 isTimerOptionActive(option.value, focusTimerMinutes, focusTimerEndTime)
-                  ? 'glass-light text-text-bright'
-                  : 'text-text-muted hover:text-text'
+                  ? 'bg-accent/25 text-accent border border-accent/30'
+                  : 'text-text-muted hover:text-text hover:bg-white/5'
               }`}
             >
               {option.label}
@@ -282,7 +277,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
           <button
             onClick={() => setShowCustomFocus(!showCustomFocus)}
             className={`px-4 py-2 rounded-xl text-sm transition-colors ${
-              showCustomFocus ? 'glass-light text-text-bright' : 'text-text-muted hover:text-text'
+              showCustomFocus ? 'bg-accent/25 text-accent border border-accent/30' : 'text-text-muted hover:text-text hover:bg-white/5'
             }`}
           >
             Custom
@@ -326,8 +321,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
               onClick={() => handleNoiseTypeChange(option.value)}
               className={`px-4 py-2 rounded-xl text-sm transition-colors ${
                 noiseType === option.value
-                  ? 'glass-light text-text-bright'
-                  : 'text-text-muted hover:text-text'
+                  ? 'bg-accent/25 text-accent border border-accent/30'
+                  : 'text-text-muted hover:text-text hover:bg-white/5'
               }`}
             >
               {option.label}
@@ -372,8 +367,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
               onClick={() => setSleepTimer(option.value)}
               className={`px-4 py-2 rounded-xl text-sm transition-colors ${
                 isTimerOptionActive(option.value, sleepTimerMinutes, sleepTimerEndTime)
-                  ? 'glass-light text-text-bright'
-                  : 'text-text-muted hover:text-text'
+                  ? 'bg-accent/25 text-accent border border-accent/30'
+                  : 'text-text-muted hover:text-text hover:bg-white/5'
               }`}
             >
               {option.label}
@@ -381,23 +376,6 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
           ))}
         </div>
       </div>
-
-      {/* Background Animation - Wide screens only */}
-      {!isCompact && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center gap-4">
-            <div>
-              <h3 className="text-text text-sm">Background Animation</h3>
-              <p className="text-text-muted text-xs mt-1">Can be distracting for focus work</p>
-            </div>
-            <Switch
-              checked={backgroundEnabled}
-              onCheckedChange={setBackgroundEnabled}
-              aria-label="Background animation"
-            />
-          </div>
-        </div>
-      )}
 
       {/* Advanced Settings (Collapsible) */}
       <div className="space-y-4">

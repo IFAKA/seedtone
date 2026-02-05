@@ -5,50 +5,36 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface SongInfoProps {
   focusSessionStart: number | null;
+  focusElapsedMs: number;
   isVisible: boolean;
   isPlaying: boolean;
 }
 
 export const SongInfo = memo(function SongInfo({
   focusSessionStart,
+  focusElapsedMs,
   isVisible,
   isPlaying,
 }: SongInfoProps) {
   const [focusMinutes, setFocusMinutes] = useState(0);
 
   useEffect(() => {
-    if (!focusSessionStart || !isPlaying) {
-      setFocusMinutes(0);
-      return;
-    }
-
     const updateFocusTime = () => {
-      const elapsed = Date.now() - focusSessionStart;
-      setFocusMinutes(Math.floor(elapsed / 60000));
+      // Current session elapsed (if playing)
+      const currentSessionMs = focusSessionStart ? Date.now() - focusSessionStart : 0;
+      // Total = accumulated + current session
+      const totalMs = focusElapsedMs + currentSessionMs;
+      setFocusMinutes(Math.floor(totalMs / 60000));
     };
 
     updateFocusTime();
+
+    // Only run interval when playing
+    if (!isPlaying) return;
+
     const interval = setInterval(updateFocusTime, 60000); // Update every minute
     return () => clearInterval(interval);
-  }, [focusSessionStart, isPlaying]);
-
-  // Don't show anything if not playing or no session
-  if (!isPlaying || !focusSessionStart) {
-    return (
-      <AnimatePresence>
-        {isVisible && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="text-center h-8"
-          >
-            {/* Empty placeholder to maintain layout */}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    );
-  }
+  }, [focusSessionStart, focusElapsedMs, isPlaying]);
 
   return (
     <AnimatePresence mode="wait">
@@ -61,7 +47,7 @@ export const SongInfo = memo(function SongInfo({
           transition={{ duration: 0.2 }}
           className="text-center"
         >
-          <div className="text-text text-sm md:text-base">
+          <div className="text-text-muted text-sm md:text-base">
             Focused: {focusMinutes} min
           </div>
         </motion.div>

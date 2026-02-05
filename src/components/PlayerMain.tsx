@@ -16,6 +16,8 @@ import { FocusMode } from "./ui/FocusMode";
 import { PlayButton } from "./player/PlayButton";
 import { GenerateButton } from "./player/GenerateButton";
 import { FeedbackButtons } from "./player/FeedbackButtons";
+import { Settings as SettingsIcon } from "lucide-react";
+import { GlassButton } from "./ui";
 import { VolumeControl, VolumeSlider } from "./player/VolumeControl";
 import { SongInfo } from "./player/SongInfo";
 import { LearningIndicator } from "./player/LearningIndicator";
@@ -59,16 +61,16 @@ export function Player() {
   const {
     sleepTimerEndTime,
     clearSleepTimer,
-    backgroundEnabled,
     focusTimerEndTime,
     focusSessionStart,
     noiseType,
     noiseVolume,
     clearFocusTimer,
     startFocusSession,
-    endFocusSession,
+    pauseFocusSession,
+    focusElapsedMs,
   } = useSettingsStore();
-  const { isDesktop, isCompact } = useIsMobile();
+  const { isDesktop } = useIsMobile();
   const {
     setNoiseType: setAudioNoiseType,
     setNoiseVolume: setAudioNoiseVolume,
@@ -94,14 +96,14 @@ export function Player() {
     clearTimer: clearFocusTimer,
   });
 
-  // Start/end focus session with play state
+  // Start/pause focus session with play state
   useEffect(() => {
     if (isPlaying && !focusSessionStart) {
       startFocusSession();
     } else if (!isPlaying && focusSessionStart) {
-      endFocusSession();
+      pauseFocusSession();
     }
-  }, [isPlaying, focusSessionStart, startFocusSession, endFocusSession]);
+  }, [isPlaying, focusSessionStart, startFocusSession, pauseFocusSession]);
 
   // Sync noise settings to audio engine on mount and when they change
   useEffect(() => {
@@ -174,11 +176,14 @@ export function Player() {
   }, [startOnboarding]);
 
   const handleTap = useCallback(() => {
+    // Close volume slider when clicking outside on any device
+    if (showVolumeSlider) {
+      closeVolumeSlider();
+      return;
+    }
+
+    // Mobile-only: toggle controls visibility
     if (!isDesktop) {
-      if (showVolumeSlider) {
-        closeVolumeSlider();
-        return;
-      }
       if (!isPlaying) {
         if (!controlsVisible) {
           resetControlsTimer();
@@ -264,7 +269,7 @@ export function Player() {
         onClick={handleTap}
         onMouseMove={isDesktop ? handleMouseMove : undefined}
       >
-        {backgroundEnabled && <LavaLamp isPlaying={isPlaying} bpm={bpm} />}
+        <LavaLamp isPlaying={isPlaying} bpm={bpm} />
 
         {!isDesktop && (
           <FocusMode
@@ -293,25 +298,7 @@ export function Player() {
             <LearningIndicator
               isVisible={showLearningIndicator && showControls}
             />
-            <div className="flex-1 flex justify-end">
-              {isDesktop && !isCompact && showControls && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-text-muted text-xs hidden md:flex items-center gap-4"
-                >
-                  <span>
-                    <kbd className="text-text">Space</kbd> play
-                  </span>
-                  <span>
-                    <kbd className="text-text">→</kbd> new
-                  </span>
-                  <span>
-                    <kbd className="text-text">L</kbd> like
-                  </span>
-                </motion.div>
-              )}
-            </div>
+            <div className="flex-1" />
           </div>
 
           <AnimatePresence>
@@ -322,30 +309,45 @@ export function Player() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="flex flex-col items-center gap-6 md:gap-10"
-                onClick={(e) => e.stopPropagation()}
+                className="flex flex-col items-center gap-6 md:gap-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Close volume slider when clicking anywhere in controls (including other buttons)
+                  if (showVolumeSlider) {
+                    closeVolumeSlider();
+                  }
+                }}
                 tabIndex={-1}
               >
                 <SongInfo
                   focusSessionStart={focusSessionStart}
+                  focusElapsedMs={focusElapsedMs}
                   isVisible={true}
                   isPlaying={isPlaying}
                 />
 
-                <div className="flex items-center gap-6 md:gap-8">
-                  <VolumeControl
-                    volume={volume}
-                    showSlider={showVolumeSlider}
-                    onToggleSlider={handleVolumeToggle}
-                  />
-                  <PlayButton
-                    isPlaying={isPlaying}
-                    isLoading={isLoading}
-                    loadingText={isPlaying ? undefined : "Generating..."}
-                    onClick={togglePlayback}
-                  />
-                  <GenerateButton onClick={generate} disabled={isLoading} />
-                </div>
+                <FeedbackButtons
+                  onLike={() => {
+                    closeVolumeSlider();
+                    like();
+                  }}
+                  onDislike={() => {
+                    closeVolumeSlider();
+                    dislike();
+                  }}
+                  songId={songId}
+                  centerSlot={
+                    <PlayButton
+                      isPlaying={isPlaying}
+                      isLoading={isLoading}
+                      loadingText={isPlaying ? undefined : "Generating..."}
+                      onClick={() => {
+                        closeVolumeSlider();
+                        togglePlayback();
+                      }}
+                    />
+                  }
+                />
 
                 <AnimatePresence mode="wait">
                   {showVolumeSlider ? (
@@ -355,6 +357,7 @@ export function Player() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       transition={{ duration: 0.15 }}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <VolumeSlider
                         volume={volume}
@@ -365,17 +368,30 @@ export function Player() {
                     </motion.div>
                   ) : (
                     <motion.div
-                      key="feedback-buttons"
+                      key="secondary-controls"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       transition={{ duration: 0.15 }}
+                      className="flex items-center gap-4 md:gap-6"
                     >
-                      <FeedbackButtons
-                        onLike={like}
-                        onDislike={dislike}
-                        songId={songId}
+                      <VolumeControl
+                        volume={volume}
+                        showSlider={showVolumeSlider}
+                        onToggleSlider={handleVolumeToggle}
                       />
+                      <GlassButton
+                        variant="default"
+                        size="lg-responsive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSettingsOpen(true);
+                        }}
+                        aria-label="Open settings"
+                      >
+                        <SettingsIcon />
+                      </GlassButton>
+                      <GenerateButton onClick={generate} disabled={isLoading} />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -383,42 +399,8 @@ export function Player() {
             )}
           </AnimatePresence>
 
-          <div className="w-full flex justify-center pt-6 pb-6 md:pt-0 md:pb-10">
-            <AnimatePresence>
-              {showControls && (
-                <motion.button
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSettingsOpen(true);
-                  }}
-                  className="
-                    flex items-center gap-2 text-text-muted hover:text-text
-                    bg-white/5 hover:bg-white/10 active:bg-white/15
-                    border border-white/10 hover:border-white/20
-                    rounded-full transition-all
-                    text-xs px-4 py-2 md:text-sm md:px-5 md:py-2.5
-                  "
-                >
-                  <svg
-                    className="w-4 h-4 md:w-[18px] md:h-[18px]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  Settings
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+          {/* Bottom spacer for layout balance */}
+          <div className="w-full pt-6 pb-6 md:pt-0 md:pb-10" />
         </div>
       </div>
     </>
