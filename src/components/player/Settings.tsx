@@ -632,7 +632,9 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
 
       {/* About */}
       <div className="text-center space-y-2 pt-6">
-        <p className="text-text-muted text-xs">LofAI v1.0.0</p>
+        <p className="text-text-muted text-xs">
+          LofAI v1.0{process.env.NEXT_PUBLIC_BUILD_ID ? ` (${process.env.NEXT_PUBLIC_BUILD_ID})` : ''}
+        </p>
         <p className="text-text-muted text-xs">
           Focus music for ADHD brains
         </p>

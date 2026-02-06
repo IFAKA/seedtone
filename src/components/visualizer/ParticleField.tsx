@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useRef, useState, useCallback } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAudioAnalyzer } from '@/lib/audio/useAudioAnalyzer';
 import type { VisualizerProps } from './types';
@@ -13,9 +13,10 @@ interface Particle {
   size: number;
   hue: number;
   life: number;
+  maxLife: number;
 }
 
-const MAX_PARTICLES = 80;
+const MAX_PARTICLES = 60;
 
 export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: VisualizerProps) {
   const { bass, overall } = useAudioAnalyzer(isPlaying);
@@ -23,29 +24,18 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const audioRef = useRef({ bass: 0, overall: 0, bpm: 78 });
+  const playingRef = useRef(isPlaying);
+  const dimsRef = useRef({ w: 0, h: 0 });
 
   audioRef.current = { bass, overall, bpm };
+  playingRef.current = isPlaying;
 
   useEffect(() => {
     if (isPlaying) setHasEverPlayed(true);
   }, [isPlaying]);
 
-  const spawnParticle = useCallback((w: number, h: number): Particle => {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 0.3 + Math.random() * 0.7;
-    return {
-      x: w * 0.3 + Math.random() * w * 0.4,
-      y: h * 0.5 + Math.random() * h * 0.3,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 0.5,
-      size: 2 + Math.random() * 3,
-      hue: 255 + Math.random() * 40,
-      life: 1,
-    };
-  }, []);
-
   useEffect(() => {
-    if (!isPlaying || !canvasRef.current) return;
+    if (!hasEverPlayed || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -54,54 +44,88 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
     let rafId: number;
 
     const resize = () => {
-      canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
-      canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
+      const dpr = window.devicePixelRatio || 1;
+      dimsRef.current.w = canvas.offsetWidth;
+      dimsRef.current.h = canvas.offsetHeight;
+      canvas.width = dimsRef.current.w * dpr;
+      canvas.height = dimsRef.current.h * dpr;
     };
     resize();
     window.addEventListener('resize', resize);
 
+    const spawn = (): Particle => {
+      const { w, h } = dimsRef.current;
+      const maxLife = 150 + Math.random() * 200;
+      return {
+        x: Math.random() * w,
+        y: h * 0.4 + Math.random() * h * 0.6,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -(0.15 + Math.random() * 0.35),
+        size: 1.5 + Math.random() * 2.5,
+        hue: 255 + Math.random() * 40,
+        life: maxLife,
+        maxLife,
+      };
+    };
+
     const loop = () => {
       rafId = requestAnimationFrame(loop);
 
-      const w = canvas.width;
-      const h = canvas.height;
-      const { bass: b, overall: o, bpm: audioBpm } = audioRef.current;
-      const bpmMult = Math.max(0.5, audioBpm / 80);
+      const { w, h } = dimsRef.current;
+      if (w === 0 || h === 0) return;
 
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      // Spawn new particles based on audio intensity
-      const spawnRate = Math.floor(1 + b * 3 + o * 2);
-      if (particlesRef.current.length < MAX_PARTICLES) {
-        for (let i = 0; i < spawnRate; i++) {
-          particlesRef.current.push(spawnParticle(w, h));
+      const { bass: b, overall: o, bpm: abpm } = audioRef.current;
+      const bpmMult = Math.max(0.6, abpm / 80);
+
+      // Spawn only while playing
+      if (playingRef.current && particlesRef.current.length < MAX_PARTICLES) {
+        const rate = Math.max(1, Math.floor(0.5 + b * 2 + o * 1.5));
+        for (let i = 0; i < rate; i++) {
+          particlesRef.current.push(spawn());
         }
       }
 
-      // Update and draw particles
+      // Update and draw
       particlesRef.current = particlesRef.current.filter(p => {
-        p.life -= 0.005 + o * 0.005;
+        p.life -= 1;
         if (p.life <= 0) return false;
 
-        p.vy -= 0.02 * bpmMult;
-        p.vx += (Math.random() - 0.5) * 0.1;
+        p.vy -= 0.008 * bpmMult;
+        p.vx += (Math.random() - 0.5) * 0.04;
         p.x += p.vx * bpmMult;
         p.y += p.vy * bpmMult;
 
-        // Bass pulses expand particles
-        const sizeBoost = b > 0.5 ? (b - 0.5) * 4 : 0;
-        const drawSize = p.size + sizeBoost;
-        const alpha = p.life * 0.7;
+        // Wrap horizontally
+        if (p.x < -20) p.x = w + 20;
+        if (p.x > w + 20) p.x = -20;
 
+        const fadeIn = Math.min(1, (p.maxLife - p.life) / 30);
+        const fadeOut = Math.min(1, p.life / 40);
+        const alpha = fadeIn * fadeOut * (0.3 + o * 0.5);
+
+        const sizeBoost = b > 0.4 ? (b - 0.4) * 3 : 0;
+        const s = p.size + sizeBoost;
+
+        // Outer glow
         ctx.beginPath();
-        ctx.arc(p.x, p.y, drawSize, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue}, 70%, 65%, ${alpha})`;
+        ctx.arc(p.x, p.y, s * 4, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 60%, 60%, ${alpha * 0.04})`;
         ctx.fill();
 
-        // Glow
+        // Inner glow
         ctx.beginPath();
-        ctx.arc(p.x, p.y, drawSize * 2, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue}, 70%, 65%, ${alpha * 0.15})`;
+        ctx.arc(p.x, p.y, s * 2, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 65%, 65%, ${alpha * 0.12})`;
+        ctx.fill();
+
+        // Core
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 70%, 70%, ${alpha})`;
         ctx.fill();
 
         return true;
@@ -109,24 +133,25 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
     };
 
     rafId = requestAnimationFrame(loop);
-
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
+      particlesRef.current = [];
     };
-  }, [isPlaying, spawnParticle]);
+  }, [hasEverPlayed]);
 
   return (
     <AnimatePresence>
       {hasEverPlayed && (
-        <motion.canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none"
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 1 }}
-        />
+        >
+          <canvas ref={canvasRef} className="w-full h-full" />
+        </motion.div>
       )}
     </AnimatePresence>
   );

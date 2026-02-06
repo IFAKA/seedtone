@@ -2,9 +2,12 @@
 
 import { useEffect, useCallback, useRef, useState } from "react";
 
+const UPDATE_CHECK_INTERVAL_MS = 60 * 1000; // Check every 60s
+
 export function useServiceWorker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const waitingWorkerRef = useRef<ServiceWorker | null>(null);
+  const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -12,6 +15,8 @@ export function useServiceWorker() {
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
+        registrationRef.current = registration;
+
         // Check if there's already a waiting worker (e.g. from a previous visit)
         if (registration.waiting) {
           waitingWorkerRef.current = registration.waiting;
@@ -46,6 +51,25 @@ export function useServiceWorker() {
         window.location.reload();
       }
     });
+
+    // Periodically check for SW updates (important for installed PWAs
+    // that stay open without full navigations)
+    const interval = setInterval(() => {
+      registrationRef.current?.update().catch(() => {});
+    }, UPDATE_CHECK_INTERVAL_MS);
+
+    // Also check when the app returns to foreground
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        registrationRef.current?.update().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const applyUpdate = useCallback(() => {

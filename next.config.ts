@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { execSync } from 'child_process';
 import withSerwistInit from '@serwist/next';
 
 const withSerwist = withSerwistInit({
@@ -7,8 +8,21 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV !== 'production',
 });
 
+// Short git hash for version display (e.g. "a1b2c3d")
+const gitHash = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return 'dev';
+  }
+})();
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+
+  env: {
+    NEXT_PUBLIC_BUILD_ID: gitHash,
+  },
 
   turbopack: {},
 
