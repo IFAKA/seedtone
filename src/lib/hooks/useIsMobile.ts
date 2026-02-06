@@ -67,13 +67,29 @@ function detectPerformanceTier(deviceType: DeviceType): 'high' | 'medium' | 'low
 }
 
 export function useIsMobile() {
-  const [state, setState] = useState({
-    isMobile: false,
-    isCompact: false,
-    isLandscape: false,
-    deviceType: 'desktop' as DeviceType,
-    screenWidth: 1024,
-    screenHeight: 768,
+  // Default to mobile-friendly values to avoid flashing desktop visualizer on SSR/hydration
+  const [state, setState] = useState(() => {
+    if (typeof window === 'undefined') {
+      return {
+        isMobile: true,
+        isCompact: true,
+        isLandscape: false,
+        deviceType: 'phone' as DeviceType,
+        screenWidth: 390,
+        screenHeight: 844,
+      };
+    }
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const device = getDeviceType();
+    return {
+      isMobile: isTouchDevice(),
+      isCompact: device !== 'desktop',
+      isLandscape: width > height,
+      deviceType: device,
+      screenWidth: width,
+      screenHeight: height,
+    };
   });
 
   useEffect(() => {

@@ -15,29 +15,29 @@ interface Dot {
   band: number;
 }
 
-const DOT_COUNT = 28;
-const CONNECTION_DIST = 100;
+const DOT_COUNT = 32;
+const CONNECTION_DIST = 110;
 
 const createDots = (w: number, h: number): Dot[] =>
   Array.from({ length: DOT_COUNT }, (_, i) => ({
-    baseX: w * 0.1 + Math.random() * w * 0.8,
-    baseY: h * 0.1 + Math.random() * h * 0.8,
-    size: 1.5 + Math.random() * 2,
-    hue: 260 + Math.random() * 35,
+    baseX: w * 0.08 + Math.random() * w * 0.84,
+    baseY: h * 0.08 + Math.random() * h * 0.84,
+    size: 1.8 + Math.random() * 2.2,
+    hue: 255 + Math.random() * 40,
     phase: Math.random() * Math.PI * 2,
-    speed: 0.2 + Math.random() * 0.5,
+    speed: 0.25 + Math.random() * 0.55,
     band: i % 3,
   }));
 
 export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerProps) {
-  const { bass, mids, overall } = useAudioAnalyzer(isPlaying);
+  const { bass, mids, highs, overall } = useAudioAnalyzer(isPlaying);
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<Dot[]>([]);
-  const audioRef = useRef({ bass: 0, mids: 0, overall: 0 });
+  const audioRef = useRef({ bass: 0, mids: 0, highs: 0, overall: 0 });
   const dimsRef = useRef({ w: 0, h: 0 });
 
-  audioRef.current = { bass, mids, overall };
+  audioRef.current = { bass, mids, highs, overall };
 
   useEffect(() => {
     if (isPlaying) setHasEverPlayed(true);
@@ -77,30 +77,32 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      const { bass: b, mids: m, overall: o } = audioRef.current;
+      const { bass: b, mids: m, highs: hi, overall: o } = audioRef.current;
       const t = Date.now() * 0.001;
       const dots = dotsRef.current;
 
-      // Compute positions
+      // Compute positions - wider motion range driven by audio
       for (let i = 0; i < dots.length; i++) {
         const d = dots[i];
-        const bandVal = d.band === 0 ? b : d.band === 1 ? m : o;
+        const bandVal = d.band === 0 ? b : d.band === 1 ? m : hi;
+        const energy = 1 + o * 0.8;
 
         posX[i] = d.baseX
-          + Math.sin(t * d.speed + d.phase) * 18
-          + Math.cos(t * d.speed * 0.6 + d.phase * 2) * 10
-          + Math.sin(d.phase + t * 1.5) * bandVal * 8;
+          + Math.sin(t * d.speed + d.phase) * 22 * energy
+          + Math.cos(t * d.speed * 0.6 + d.phase * 2) * 14 * energy
+          + Math.sin(d.phase + t * 1.5) * bandVal * 18;
 
         posY[i] = d.baseY
-          + Math.cos(t * d.speed * 0.8 + d.phase) * 14
-          + Math.sin(t * d.speed * 0.4 + d.phase * 1.5) * 8
-          + Math.cos(d.phase + t * 1.5) * bandVal * 6;
+          + Math.cos(t * d.speed * 0.8 + d.phase) * 18 * energy
+          + Math.sin(t * d.speed * 0.4 + d.phase * 1.5) * 10 * energy
+          + Math.cos(d.phase + t * 1.5) * bandVal * 14;
       }
 
-      // Draw connections
-      const connDist = CONNECTION_DIST + o * 40;
+      // Draw connections - pulse width on bass
+      const connDist = CONNECTION_DIST + o * 50;
       const connDistSq = connDist * connDist;
-      ctx.lineWidth = 0.5;
+      const lineW = 0.5 + b * 1.5;
+      ctx.lineWidth = lineW;
 
       for (let i = 0; i < dots.length; i++) {
         for (let j = i + 1; j < dots.length; j++) {
@@ -110,8 +112,9 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
 
           if (distSq < connDistSq) {
             const dist = Math.sqrt(distSq);
-            const alpha = (1 - dist / connDist) * 0.12 * (0.5 + o * 0.5);
-            ctx.strokeStyle = `hsla(275, 45%, 60%, ${alpha})`;
+            const alpha = (1 - dist / connDist) * (0.12 + b * 0.15) * (0.5 + o * 0.5);
+            const hue = 270 + m * 20;
+            ctx.strokeStyle = `hsla(${hue}, 50%, 60%, ${alpha})`;
             ctx.beginPath();
             ctx.moveTo(posX[i], posY[i]);
             ctx.lineTo(posX[j], posY[j]);
@@ -123,27 +126,29 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
       // Draw dots
       for (let i = 0; i < dots.length; i++) {
         const d = dots[i];
-        const bandVal = d.band === 0 ? b : d.band === 1 ? m : o;
-        const s = d.size + bandVal * 2.5;
-        const alpha = 0.35 + bandVal * 0.4;
+        const bandVal = d.band === 0 ? b : d.band === 1 ? m : hi;
+        const s = d.size + bandVal * 4;
+        const alpha = 0.4 + bandVal * 0.5;
+        const hue = d.hue + m * 15;
 
-        // Glow
+        // Glow - bigger on bass
+        const glowR = s * (3 + b * 2);
         ctx.beginPath();
-        ctx.arc(posX[i], posY[i], s * 3, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${d.hue}, 55%, 60%, ${alpha * 0.06})`;
+        ctx.arc(posX[i], posY[i], glowR, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 60%, 60%, ${alpha * 0.08})`;
         ctx.fill();
 
         // Core
         ctx.beginPath();
         ctx.arc(posX[i], posY[i], s, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${d.hue}, 65%, 65%, ${alpha})`;
+        ctx.fillStyle = `hsla(${hue}, 70%, 68%, ${alpha})`;
         ctx.fill();
       }
 
-      // Subtle center ambient glow
-      const cAlpha = 0.03 + o * 0.05;
-      const cg = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.35);
-      cg.addColorStop(0, `hsla(275, 45%, 50%, ${cAlpha})`);
+      // Center ambient glow - stronger reaction
+      const cAlpha = 0.04 + o * 0.08;
+      const cg = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) * 0.4);
+      cg.addColorStop(0, `hsla(${270 + b * 20}, 50%, 50%, ${cAlpha})`);
       cg.addColorStop(1, 'transparent');
       ctx.fillStyle = cg;
       ctx.fillRect(0, 0, w, h);

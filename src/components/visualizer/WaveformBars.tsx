@@ -60,31 +60,42 @@ export const WaveformBars = memo(function WaveformBars({ isPlaying }: Visualizer
       const total = BAR_COUNT * (barW + gap);
       const ox = (w - total) / 2;
 
+      // Bass pulse - global glow at bottom on strong beats
+      if (b > 0.45) {
+        const pulseAlpha = (b - 0.45) * 0.6;
+        const grad = ctx.createLinearGradient(0, h, 0, h * 0.5);
+        grad.addColorStop(0, `hsla(270, 80%, 50%, ${pulseAlpha * 0.15})`);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
+
       for (let i = 0; i < BAR_COUNT; i++) {
         const p = i / BAR_COUNT;
 
-        // Frequency-mapped influence
-        const bassI = Math.max(0, 1 - p * 2.5) * b;
-        const midsI = (1 - Math.abs(p - 0.5) * 2.5) * m * 0.8;
-        const highsI = Math.max(0, p * 2.5 - 1.2) * hi;
+        // Frequency-mapped influence - stronger reactivity
+        const bassI = Math.max(0, 1 - p * 2.5) * b * 1.4;
+        const midsI = (1 - Math.abs(p - 0.5) * 2.5) * m * 1.1;
+        const highsI = Math.max(0, p * 2.5 - 1.2) * hi * 1.2;
 
         // Gentle wave for baseline animation
         const wave = Math.sin(p * Math.PI * 3 + t * 1.2) * 0.05
           + Math.cos(p * Math.PI * 5 - t * 0.7) * 0.025;
 
         const target = Math.min(1, Math.max(0.015,
-          0.03 + (bassI + midsI + highsI) * 0.6 + o * 0.12 + wave));
+          0.03 + (bassI + midsI + highsI) * 0.7 + o * 0.18 + wave));
 
-        // Smooth interpolation
-        smooth[i] += (target - smooth[i]) * 0.12;
+        // Faster interpolation for snappier response
+        smooth[i] += (target - smooth[i]) * 0.22;
 
-        const barH = smooth[i] * h * 0.85;
+        const barH = smooth[i] * h * 0.9;
         const x = ox + i * (barW + gap);
         const y = h - barH;
 
-        const hue = 260 + p * 30;
-        const light = 48 + smooth[i] * 22;
-        const alpha = 0.35 + smooth[i] * 0.55;
+        // Hue shifts with bass energy
+        const hue = 260 + p * 30 + b * 15;
+        const light = 48 + smooth[i] * 28;
+        const alpha = 0.4 + smooth[i] * 0.55;
 
         // Rounded rect (top corners only)
         const r = Math.min(barW / 2, 3);
@@ -98,13 +109,21 @@ export const WaveformBars = memo(function WaveformBars({ isPlaying }: Visualizer
         ctx.quadraticCurveTo(x, y, x + r, y);
         ctx.closePath();
 
-        // Gradient fill
+        // Gradient fill - brighter top
         const grad = ctx.createLinearGradient(x, y, x, h);
-        grad.addColorStop(0, `hsla(${hue}, 70%, ${light}%, ${alpha})`);
-        grad.addColorStop(0.7, `hsla(${hue}, 65%, ${light - 10}%, ${alpha * 0.5})`);
+        grad.addColorStop(0, `hsla(${hue}, 75%, ${light}%, ${alpha})`);
+        grad.addColorStop(0.5, `hsla(${hue}, 70%, ${light - 8}%, ${alpha * 0.6})`);
         grad.addColorStop(1, `hsla(${hue}, 60%, ${light - 15}%, ${alpha * 0.1})`);
         ctx.fillStyle = grad;
         ctx.fill();
+
+        // Top cap glow on active bars
+        if (smooth[i] > 0.15) {
+          ctx.beginPath();
+          ctx.arc(x + barW / 2, y, barW * 0.6, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${hue}, 80%, 70%, ${smooth[i] * 0.12})`;
+          ctx.fill();
+        }
       }
     };
 
@@ -128,7 +147,7 @@ export const WaveformBars = memo(function WaveformBars({ isPlaying }: Visualizer
           <canvas
             ref={canvasRef}
             className="w-full"
-            style={{ height: '50%', maxHeight: '350px' }}
+            style={{ height: '60%', maxHeight: '450px' }}
           />
         </motion.div>
       )}

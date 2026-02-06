@@ -3,7 +3,7 @@
   "short_name": "LofAI",
   "description": "AI-generated lofi music that learns your taste",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#0a0a0f",
   "theme_color": "#0a0a0f",
   "orientation": "any",

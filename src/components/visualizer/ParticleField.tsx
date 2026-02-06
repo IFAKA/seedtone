@@ -16,18 +16,18 @@ interface Particle {
   maxLife: number;
 }
 
-const MAX_PARTICLES = 60;
+const MAX_PARTICLES = 80;
 
 export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: VisualizerProps) {
-  const { bass, overall } = useAudioAnalyzer(isPlaying);
+  const { bass, mids, highs, overall } = useAudioAnalyzer(isPlaying);
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
-  const audioRef = useRef({ bass: 0, overall: 0, bpm: 78 });
+  const audioRef = useRef({ bass: 0, mids: 0, highs: 0, overall: 0, bpm: 78 });
   const playingRef = useRef(isPlaying);
   const dimsRef = useRef({ w: 0, h: 0 });
 
-  audioRef.current = { bass, overall, bpm };
+  audioRef.current = { bass, mids, highs, overall, bpm };
   playingRef.current = isPlaying;
 
   useEffect(() => {
@@ -53,16 +53,16 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
     resize();
     window.addEventListener('resize', resize);
 
-    const spawn = (): Particle => {
+    const spawn = (burst = false): Particle => {
       const { w, h } = dimsRef.current;
-      const maxLife = 150 + Math.random() * 200;
+      const maxLife = 120 + Math.random() * 220;
       return {
         x: Math.random() * w,
-        y: h * 0.4 + Math.random() * h * 0.6,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: -(0.15 + Math.random() * 0.35),
-        size: 1.5 + Math.random() * 2.5,
-        hue: 255 + Math.random() * 40,
+        y: burst ? h * 0.6 + Math.random() * h * 0.4 : h * 0.3 + Math.random() * h * 0.7,
+        vx: (Math.random() - 0.5) * (burst ? 1.2 : 0.4),
+        vy: -(0.2 + Math.random() * (burst ? 0.8 : 0.4)),
+        size: 1.5 + Math.random() * (burst ? 3.5 : 2.5),
+        hue: 250 + Math.random() * 50,
         life: maxLife,
         maxLife,
       };
@@ -78,15 +78,26 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      const { bass: b, overall: o, bpm: abpm } = audioRef.current;
+      const { bass: b, mids: m, highs: hi, overall: o, bpm: abpm } = audioRef.current;
       const bpmMult = Math.max(0.6, abpm / 80);
 
-      // Spawn only while playing
+      // Spawn - faster on audio energy, burst on strong bass
       if (playingRef.current && particlesRef.current.length < MAX_PARTICLES) {
-        const rate = Math.max(1, Math.floor(0.5 + b * 2 + o * 1.5));
+        const rate = Math.max(1, Math.floor(1 + b * 3 + o * 2));
+        const isBurst = b > 0.6;
         for (let i = 0; i < rate; i++) {
-          particlesRef.current.push(spawn());
+          particlesRef.current.push(spawn(isBurst));
         }
+      }
+
+      // Ambient glow reacting to mids
+      if (o > 0.2) {
+        const gAlpha = o * 0.06;
+        const g = ctx.createRadialGradient(w / 2, h * 0.7, 0, w / 2, h * 0.7, w * 0.4);
+        g.addColorStop(0, `hsla(270, 60%, 50%, ${gAlpha})`);
+        g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
       }
 
       // Update and draw
@@ -94,8 +105,9 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
         p.life -= 1;
         if (p.life <= 0) return false;
 
-        p.vy -= 0.008 * bpmMult;
-        p.vx += (Math.random() - 0.5) * 0.04;
+        // Audio-reactive velocity
+        p.vy -= (0.01 + hi * 0.008) * bpmMult;
+        p.vx += (Math.random() - 0.5) * 0.05 + Math.sin(Date.now() * 0.002 + p.hue) * m * 0.02;
         p.x += p.vx * bpmMult;
         p.y += p.vy * bpmMult;
 
@@ -103,29 +115,32 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
         if (p.x < -20) p.x = w + 20;
         if (p.x > w + 20) p.x = -20;
 
-        const fadeIn = Math.min(1, (p.maxLife - p.life) / 30);
-        const fadeOut = Math.min(1, p.life / 40);
-        const alpha = fadeIn * fadeOut * (0.3 + o * 0.5);
+        const fadeIn = Math.min(1, (p.maxLife - p.life) / 25);
+        const fadeOut = Math.min(1, p.life / 35);
+        const alpha = fadeIn * fadeOut * (0.35 + o * 0.6);
 
-        const sizeBoost = b > 0.4 ? (b - 0.4) * 3 : 0;
+        const sizeBoost = b > 0.35 ? (b - 0.35) * 4 : 0;
         const s = p.size + sizeBoost;
+
+        // Hue shifts with mids
+        const hue = p.hue + m * 20;
 
         // Outer glow
         ctx.beginPath();
-        ctx.arc(p.x, p.y, s * 4, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue}, 60%, 60%, ${alpha * 0.04})`;
+        ctx.arc(p.x, p.y, s * 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 60%, 60%, ${alpha * 0.05})`;
         ctx.fill();
 
         // Inner glow
         ctx.beginPath();
-        ctx.arc(p.x, p.y, s * 2, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue}, 65%, 65%, ${alpha * 0.12})`;
+        ctx.arc(p.x, p.y, s * 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 70%, 65%, ${alpha * 0.15})`;
         ctx.fill();
 
         // Core
         ctx.beginPath();
         ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue}, 70%, 70%, ${alpha})`;
+        ctx.fillStyle = `hsla(${hue}, 75%, 72%, ${alpha})`;
         ctx.fill();
 
         return true;
