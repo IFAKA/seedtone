@@ -21,10 +21,17 @@ const samplesCacheStrategy: RuntimeCaching = {
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
+  skipWaiting: false,
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: [samplesCacheStrategy, ...defaultCache],
 });
 
 serwist.addEventListeners();
+
+// Allow the client to trigger skipWaiting when the user is ready to update
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
