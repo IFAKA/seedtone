@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
         key: 'Content-Security-Policy',
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-eval'", // unsafe-eval needed for TF.js
+          "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // unsafe-eval for TF.js, unsafe-inline for Next.js bootstrap scripts
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob:",
           "font-src 'self'",
