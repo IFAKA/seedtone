@@ -9,7 +9,7 @@ export interface TempoConfig {
 }
 
 export interface DrumSampleConfig {
-  path: string;              // e.g. 'drums/breakcore'
+  path: string;              // e.g. 'drums/lofi'
   kickVolume?: number;       // dB, default 0
   snareVolume?: number;      // dB, default -4
   hatVolume?: number;        // dB, default -6
