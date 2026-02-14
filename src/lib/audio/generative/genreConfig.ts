@@ -204,5 +204,6 @@ export const GENRE_CONFIGS: Record<GenreId, GenreConfig> = {
 export const GENRE_IDS: GenreId[] = ['lofi'];
 
 export function getGenreConfig(id: GenreId): GenreConfig {
-  return GENRE_CONFIGS[id];
+  // Fallback to lofi if invalid genre ID (e.g., from stale localStorage)
+  return GENRE_CONFIGS[id] || GENRE_CONFIGS.lofi;
 }
